@@ -1,6 +1,5 @@
 function output = SubtractSol( x, y )
     output = [];
-    i = 1;
     for i = 1:length(x)
         if(~(x(i)==y(i)))
             temp = find(x == y(i));
