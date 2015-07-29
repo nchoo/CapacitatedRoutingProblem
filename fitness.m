@@ -12,7 +12,7 @@ function [ val ] = fitness( sol , depot, distance)
         elseif sol(j+1) == -1
             val = val + depot(sol(j));
         else
-            val = val + distance(j, j+1);
+            val = val + distance(sol(j), sol(j+1));
         end
     end
     if ~(sol(end) == -1)
