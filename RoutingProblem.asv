@@ -1,10 +1,3 @@
-classdef Particle
-    properties
-    end
-    methods
-    end
-end
-
 function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capacity )
 %ROUTINGPROBLEM Summary of this function goes here
 %   Detailed explanation goes here
@@ -21,14 +14,12 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
     global gnum
     global gcapacity
     global len
-    global c
     gdepot = depot;
     gdistance = distance;
     gmass = mass;
     gnum = capacity;
     gcapacity = capacity;
     len = length(depot)+num-1;
-    c = 2;
 
 % check conditions
     if (sum(mass) > num * capacity)
@@ -52,7 +43,7 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
                 initsol{i}(j) = temp(itemtocar);
                 temp(itemtocar) = [];
             end
-            invalid = CheckMass(initsol{i});
+            invalid = CheckMass(initsol{i}, mass, capacity );
         end
     end
     
@@ -60,14 +51,16 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
 
     fitness = zeros(1,numsol);
     for i = 1:numsol
-        fitness = Fitness(initsol{i});
+        fitness = Fitness(initsol{i}, depot, distance);
     end
     
     pbest = initsol;
     [~, index] = min(fitness);
     gbest = initsol{index};
     velocity = cell(1,numsol);
-    %w = 1;
+    w = 1;
+    c1 = 2;
+    c2 = 2;
     
     %INSERT CONDITION
     condition = 1;
@@ -78,14 +71,13 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
             invalid = 1;
             timesInvalid = 0;
             while invalid == 1
-                %inertia = Multiply(w,velocity{i});
-                inertia = velocity{i};
-                cognitive = Multiply(c*rand(1), Subtract(pbest{i}, initsol{i}));
-                social = Multiply(c*rand(1), Subtract(gbest, initsol{i}));
+                inertia = Multiply(w,velocity{i},len);
+                cognitive = Multiply(c1*rand(1), Subtract(pbest{i}, initsol{i}),len);
+                social = Multiply(c2*rand(1), Subtract(gbest, initsol{i}),len);
                 tempvelo = cat(1, inertia, cognitive, social);
                 tempsol = Addition(velocity{i}, initsol{i});
-                tempfit = Fitness(tempsol);
-                invalid = CheckMass(tempsol);
+                tempfit = Fitness(tempsol, depot, distance);
+                invalid = CheckMass(tempsol, mass, capacity);
                 timesInvalid = timesInvalid + 1;
                 if timesInvalid > 20
                     %give up trying to fix
@@ -95,11 +87,11 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
             end
             velocity{i} = tempvelo;
             initsol{i} = tempsol;
-            if tempfit < Fitness(pbest{i})
+            if tempfit < Fitness(pbest{i}, depot, distance)
                 pbest{i} = initsol{i};
-                if tempfit < Fitness(gbest)
+                if tempfit < Fitness(gbest, depot, distance)
                     gbest = initsol{i};
-                    gbestfit = Fitness(gbest);
+                    gbestfit = Fitness(gbest, depot, distance);
                 end
             end
             fitness(i) = tempfit;
@@ -109,11 +101,6 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
             condition = 0;
         end
     end
-end
-
-function [] = PSO()
-    global c
-
 end
 
 function [ invalid ] = CheckMass( sol )
@@ -216,3 +203,5 @@ function [ y ] = Multiply( constant, swap )
         end
     end
 end
+
+
