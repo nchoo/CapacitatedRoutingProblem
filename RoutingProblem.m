@@ -1,20 +1,16 @@
-classdef Particle
-    properties
-    end
-    methods
-    end
-end
-
-function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capacity )
-%ROUTINGPROBLEM Summary of this function goes here
-%   Detailed explanation goes here
+function [ bestsol, bestfit] = RoutingProblem( depot, distance, mass, num, capacity )
+    tic
+%ROUTINGPROBLEM Adaptive permutation PSO algorithm for solving capacitated
+%routing problem
 %   depot - distance between customer and depot
 %   distance - distances between each customer
 %   mass - weight of each package for each customer
 %   num - number of cars
 %   capacity - capacity per car
+%   bestsol is the best solution found during the search
+%   bestfit is the fitness of the best solution found during the search
 
-% set globals
+    % set globals
     global gdepot
     global gdistance
     global gmass
@@ -25,12 +21,14 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
     gdepot = depot;
     gdistance = distance;
     gmass = mass;
-    gnum = capacity;
+    gnum = num;
     gcapacity = capacity;
     len = length(depot)+num-1;
-    c = 2;
+    c = 1.5;
+    swarmLIMIT = 100;
+    bestfit = [];
 
-% check conditions
+    % check to see if the mass is too large for the number of cars
     if (sum(mass) > num * capacity)
         msgID = 'MYFUN:TooMuchMass';
         msg = 'Not enough cars for capacity.';
@@ -38,181 +36,94 @@ function [ gbest, gbestfit] = RoutingProblem( depot, distance, mass, num, capaci
         throw(baseException);
     end
     
-% Generate initial solutions
-    numsol = 10;
-    initsol = cell(1,numsol);
+    % Generate first particle
+    swarm = cell(1,1);
+    swarm{1} = cell(1,1);
+    swarm{1}{1} = Particle();
     
-    for i = 1:numsol
-        invalid = 1;
-        while invalid == 1
-            temp = 1:length(depot);
-            temp = cat(2, temp, -1*ones(1,num-1));
-            for j = 1:(length(depot)+num-1)
-                itemtocar = ceil(length(temp)*rand(1));
-                initsol{i}(j) = temp(itemtocar);
-                temp(itemtocar) = [];
-            end
-            invalid = CheckMass(initsol{i});
-        end
-    end
+    % set gbest to the first particle
+    tbest = cell(1,1);
+    tbest{1} = swarm{1}{1};
+    gbest = swarm{1}{1};
     
-% Calculate fitness
-
-    fitness = zeros(1,numsol);
-    for i = 1:numsol
-        fitness = Fitness(initsol{i});
-    end
-    
-    pbest = initsol;
-    [~, index] = min(fitness);
-    gbest = initsol{index};
-    velocity = cell(1,numsol);
-    %w = 1;
-    
-    %INSERT CONDITION
+    % termination condition is set below to run until maxIters
     condition = 1;
-    maxIters = 100;
-    iters = 0;
+    maxIters = 500;
+    iters = 1;
     while condition
-        for i = 1:numsol
-            invalid = 1;
-            timesInvalid = 0;
-            while invalid == 1
-                %inertia = Multiply(w,velocity{i});
-                inertia = velocity{i};
-                cognitive = Multiply(c*rand(1), Subtract(pbest{i}, initsol{i}));
-                social = Multiply(c*rand(1), Subtract(gbest, initsol{i}));
-                tempvelo = cat(1, inertia, cognitive, social);
-                tempsol = Addition(velocity{i}, initsol{i});
-                tempfit = Fitness(tempsol);
-                invalid = CheckMass(tempsol);
-                timesInvalid = timesInvalid + 1;
-                if timesInvalid > 20
-                    %give up trying to fix
-                    initsol{i} = pbest{ceil(numsol*rand(1))};
-                    timesInvalid = 0;
+        % r is the threshold to determine if a tribe is bad or good
+        r = rand(1);
+        i = 1;
+        while i <= length(swarm)
+            nexttbest = tbest{i};
+            worstfit = tbest{i};
+            good = 0;
+            worstfitindex= [];
+            for j = 1:length(swarm{i})
+                swarm{i}{j} = swarm{i}{j}.Next(tbest{i});
+                if swarm{i}{j}.fitness < nexttbest.fitness
+                    nexttbest = swarm{i}{j};
+                    if swarm{i}{j}.fitness < gbest.fitness
+                        gbest = swarm{i}{j};
+                    end
+                elseif swarm{i}{j}.fitness > worstfit.fitness
+                    worstfitindex = j;
+                    worstfit = swarm{i}{j};
+                end
+                if swarm{i}{j}.progress == 1
+                    good = good + 1;
                 end
             end
-            velocity{i} = tempvelo;
-            initsol{i} = tempsol;
-            if tempfit < Fitness(pbest{i})
-                pbest{i} = initsol{i};
-                if tempfit < Fitness(gbest)
-                    gbest = initsol{i};
-                    gbestfit = Fitness(gbest);
+            tbest{i} = nexttbest;
+            %if the current tribe is bad, add a particle into the new tribe
+            if r > good/(length(swarm{i})) && length(swarm) < swarmLIMIT
+                newtribe = length(swarm)+1;
+                %if there is no new tribe, create it
+                if length(swarm) < newtribe
+                    swarm{newtribe} = cell(1);
+                    %the solution of the particle is the best solution of
+                    %the tribe
+                    swarm{newtribe}{end} = Particle(tbest{i}.sol);
+                    tbest{newtribe} = swarm{newtribe}{end};
+                %else if the new tribe exists add the new particle into the 
+                %new tribe
+                else
+                    swarm{newtribe}{end+1} = Particle(tbest{i}.sol);
+                    if swarm{newtribe}{end}.fitness < tbest{newtribe}.fitness
+                        tbest{newtribe} = swarm{newtribe}{end};
+                    end
+                end
+            %if the current tribe is good, then delete its worst particle
+            %given that the worst particle is also not the best one
+            elseif r < good/(length(swarm{i})) && length(swarm) > 1 && ~isempty(worstfitindex)
+                swarm{i}(worstfitindex) = [];
+                if isempty(swarm{i})
+                    swarm(i) = [];
+                end
+            %if the tribe only had one particle, delete it if the solution
+            %was worst than the other particles
+            elseif length(swarm{i}) == 1 && ~(length(swarm) == 1) && ~isempty(worstfitindex)
+                if i == 1 && swarm{i+1}{1}.fitness < swarm{i}{worstfitindex}.fitness 
+                    swarm(i) = [];
+                    tbest(i) = [];
+                elseif ~(i == 1)
+                    if swarm{i-1}{1}.fitness < swarm{i}{worstfitindex}.fitness
+                    swarm(i) = [];
+                    tbest(i) = [];
+                    end
                 end
             end
-            fitness(i) = tempfit;
+            i = i+1;
         end
-        iters = iters + 1
+        %iterate the count and check for the end condition
+        iters = iters + 1;
         if iters > maxIters;
             condition = 0;
         end
+        %bestfit = cat(1,bestfit,gbest.fitness);
     end
+    bestsol = gbest.sol;
+    bestfit = gbest.fitness;
+    toc
 end
 
-function [] = PSO()
-    global c
-
-end
-
-function [ invalid ] = CheckMass( sol )
-%UNTITLED4 Summary of this function goes here
-%   Detailed explanation goes here
-    global gmass
-    global gcapacity
-    invalid = 0;
-    sum = 0;
-    for i = 1:length(sol)
-        if(sol(i) == -1)
-            if(sum > gcapacity)
-                invalid = 1;
-                return
-            end
-            sum = 0;
-        else
-            sum = sum + gmass(sol(i));
-        end
-    end
-    if(sum > gcapacity)
-        invalid = 1;
-    end
-end
-
-function [ val ] = Fitness( sol )
-%UNTITLED3 Summary of this function goes here
-%   Detailed explanation goes here
-    global gdepot
-    global gdistance
-    val = 0;
-    if ~(sol(1) == -1)
-        val = val + gdepot(sol(1));
-    end
-    for j = 1:(length(sol)-1)
-        if sol(j)== -1 && sol(j+1) == -1
-        elseif sol(j) == -1
-            val = val + gdepot(sol(j+1));
-        elseif sol(j+1) == -1
-            val = val + gdepot(sol(j));
-        else
-            val = val + gdistance(sol(j), sol(j+1));
-        end
-    end
-    if ~(sol(end) == -1)
-        val = val + gdepot(sol(end));
-    end
-end
-
-function output = Subtract( x, y )
-    output = [];
-    for i = 1:length(x)
-        if(~(x(i)==y(i)))
-            temp = find(x == y(i));
-            j = 1;
-            tempindex = 1;
-            while j <= length(temp)
-                if ~(x(temp(j)) == y(temp(j)))
-                    tempindex = j;
-                    j = length(temp);
-                end
-                j = j+1;
-            end
-            if ~isempty(temp)
-                output = cat(1, output, [i, temp(tempindex)]);
-                temp2 = x(temp(tempindex));
-                x(temp(tempindex)) = x(i);
-                x(i) = temp2;
-            end
-        end
-    end
-end
-
-function [ y ] = Addition( swap, x )
-%UNTITLED2 Summary of this function goes here
-%   Detailed explanation goes here
-    [j,~] = size(swap);
-    for i = 1:j
-        temp = x(swap(i,1));
-        x(swap(i,1)) = x(swap(i,2));
-        x(swap(i,2)) = temp;
-    end
-    y = x;
-end
-
-function [ y ] = Multiply( constant, swap )
-%UNTITLED2 Summary of this function goes here
-%   Detailed explanation goes here
-    global len
-    y = [];
-    if ~(isempty(swap))
-        if constant <= 0 
-        elseif constant < 1
-            y = swap(1:ceil((constant/2)*length(swap)),:);
-        elseif constant > 1 
-            %y = cat(1,swap, swap(ceil((constant/2)*length(swap)),:));
-            y = cat(1,swap, ceil(len*rand(ceil((constant/2)*length(swap)),2)));
-        elseif constant == 1
-            y = swap;
-        end
-    end
-end

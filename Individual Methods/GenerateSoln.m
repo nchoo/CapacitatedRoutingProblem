@@ -2,6 +2,9 @@
 %x, y should be initialized, and are included in the gitrepo
 %Takes bestSolution which is a cell array, with each index representing a car
 %and containing an array of customers, and plots them
+scatter([0],[0],[],10,'filled');
+hold on
+scatter(x,y);
 
 colorMatrix = varycolor(length(bestSolution));
 for i = 1:length(bestSolution)
@@ -13,4 +16,6 @@ for i = 1:length(bestSolution)
         end
     end
 end
+
+
 
